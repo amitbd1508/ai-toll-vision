@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Toll Booth Vision Analytics — POC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0f1420; --panel:#161d2e; --border:#26304a; --text:#e8ecf4; --muted:#8b93a7;
+          --accent:#5b8cff; --good:#3fce7a; --warn:#f5a623; --bad:#ff5c5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:20px 28px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:18px; margin:0; font-weight:600; }
+  header .badge { font-size:12px; color:var(--muted); background:var(--panel); padding:4px 10px; border-radius:20px; border:1px solid var(--border); }
+  main { max-width:1100px; margin:0 auto; padding:24px 28px 60px; display:grid; gap:20px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+  .panel h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:9px 16px; font-size:14px; cursor:pointer; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  input[type=file], input[type=number] { background:#0d1220; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; }
+  select { background:#0d1220; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:12px; }
+  .stat { background:#0d1220; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+  .stat .n { font-size:22px; font-weight:700; }
+  .stat .l { font-size:11px; color:var(--muted); margin-top:2px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; }
+  video { width:100%; border-radius:8px; border:1px solid var(--border); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .pill.good { background:rgba(63,206,122,.15); color:var(--good); }
+  .pill.warn { background:rgba(245,166,35,.15); color:var(--warn); }
+  .pill.bad { background:rgba(255,92,92,.15); color:var(--bad); }
+  .muted { color:var(--muted); font-size:13px; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:800px){ .two-col{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚧 AI Toll Booth Vision Analytics <span class="muted">— demo/POC</span></h1>
+  <span class="badge" id="healthBadge">checking…</span>
+</header>
+<main>
+
+  <div class="panel">
+    <h2>1. Upload &amp; Process</h2>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".mp4,.avi,.mov">
+      <button id="uploadBtn">Upload Toll Booth Video</button>
+      <select id="videoSelect"><option value="">— select a processed/uploaded video —</option></select>
+      <button id="processBtn" class="secondary">Process Video</button>
+      <button id="refreshBtn" class="secondary">Refresh</button>
+    </div>
+    <p class="muted" id="statusLine"></p>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>Original Upload</h2>
+      <video id="rawVideo" controls></video>
+    </div>
+    <div class="panel">
+      <h2>Annotated Output (detection / tracking / ROI / segmentation)</h2>
+      <video id="annotatedVideo" controls></video>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Summary</h2>
+    <div class="stats" id="statsGrid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>3. Event Timeline</h2>
+    <div class="row">
+      <select id="filterType">
+        <option value="">All event types</option>
+        <option>VEHICLE_ENTERED</option><option>VEHICLE_EXITED</option>
+        <option>VEHICLE_TYPE_CHANGED</option><option>PLATE_DETECTED</option>
+        <option>OCR_COMPLETED</option><option>LOW_CONFIDENCE</option>
+        <option>UNUSUAL_VISUAL_CONDITION</option>
+      </select>
+      <input type="number" step="0.05" min="0" max="1" id="filterConf" placeholder="min confidence">
+      <button id="applyFilters" class="secondary">Apply filters</button>
+    </div>
+    <table id="eventsTable"><thead><tr><th>Time (s)</th><th>Type</th><th>Vehicle</th><th>Confidence</th><th>Metadata</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>4. OCR Results <span class="pill warn">experimental</span></h2>
+      <table id="ocrTable"><thead><tr><th>Frame</th><th>Plate text</th><th>Confidence</th></tr></thead><tbody></tbody></table>
+      <p class="muted" id="ocrEmpty"></p>
+    </div>
+    <div class="panel">
+      <h2>5. VLM Reasoning</h2>
+      <table id="vlmTable"><thead><tr><th>Time (s)</th><th>Vehicles</th><th>Lane</th><th>Conditions</th></tr></thead><tbody></tbody></table>
+      <p class="muted" id="vlmEmpty"></p>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const api = (path, opts) => fetch(path, opts).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); });
+
+async function loadHealth() {
+  try {
+    const h = await api('/health');
+    const badge = document.getElementById('healthBadge');
+    badge.textContent = `${h.device.device.toUpperCase()} · detection:${h.stages.detection} · seg:${h.stages.segmentation} · ocr:${h.stages.ocr} · vlm:${h.stages.vlm}`;
+  } catch (e) { document.getElementById('healthBadge').textContent = 'backend unreachable'; }
+}
+
+async function loadVideos() {
+  const videos = await api('/videos');
+  const sel = document.getElementById('videoSelect');
+  sel.innerHTML = '<option value="">— select a video —</option>' +
+    videos.map(v => `<option value="${v.video_id}">${v.filename} [${v.status}]</option>`).join('');
+}
+
+document.getElementById('uploadBtn').onclick = async () => {
+  const f = document.getElementById('fileInput').files[0];
+  if (!f) return alert('Choose a video file first');
+  const fd = new FormData(); fd.append('file', f);
+  document.getElementById('statusLine').textContent = 'Uploading…';
+  const v = await api('/videos/upload', { method: 'POST', body: fd });
+  document.getElementById('statusLine').textContent = `Uploaded ${v.filename} (${v.video_id})`;
+  await loadVideos();
+  document.getElementById('videoSelect').value = v.video_id;
+  onSelectVideo();
+};
+
+document.getElementById('processBtn').onclick = async () => {
+  const id = document.getElementById('videoSelect').value;
+  if (!id) return alert('Select a video first');
+  document.getElementById('statusLine').textContent = 'Processing… (this may take a while on CPU)';
+  document.getElementById('processBtn').disabled = true;
+  try {
+    const res = await api(`/videos/${id}/process`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    document.getElementById('statusLine').textContent =
+      `Done: ${res.frames_processed} frames in ${res.elapsed_sec.toFixed(1)}s (device=${res.device}, detector=${res.detector_mode})`;
+    await loadEverything(id);
+  } catch (e) {
+    document.getElementById('statusLine').textContent = 'Processing failed: ' + e.message;
+  }
+  document.getElementById('processBtn').disabled = false;
+};
+
+document.getElementById('refreshBtn').onclick = loadVideos;
+document.getElementById('videoSelect').onchange = onSelectVideo;
+document.getElementById('applyFilters').onclick = () => loadEvents(document.getElementById('videoSelect').value);
+
+async function onSelectVideo() {
+  const id = document.getElementById('videoSelect').value;
+  if (!id) return;
+  const v = await api(`/videos/${id}`);
+  const ext = v.filename.match(/\.[a-z0-9]+$/i)?.[0] || '.mp4';
+  document.getElementById('rawVideo').src = `/videos_static/${id}${ext}`;
+  if (v.annotated_path) {
+    document.getElementById('annotatedVideo').src = `/outputs/${v.video_id}_annotated.mp4`;
+  }
+  await loadEverything(id);
+}
+
+async function loadEverything(id) {
+  await Promise.all([loadStats(id), loadEvents(id), loadOcr(id), loadVlm(id)]);
+}
+
+async function loadStats(id) {
+  const vehicles = await api(`/videos/${id}/vehicles`);
+  const counts = { car:0, truck:0, bus:0, motorcycle:0, other:0 };
+  vehicles.forEach(v => counts[v.vehicle_type] = (counts[v.vehicle_type]||0) + 1);
+  const active = vehicles.filter(v => v.is_active).length;
+  const grid = document.getElementById('statsGrid');
+  const stats = [
+    ['Total vehicles', vehicles.length], ['Cars', counts.car], ['Trucks', counts.truck],
+    ['Buses', counts.bus], ['Motorcycles', counts.motorcycle], ['Active now', active],
+  ];
+  grid.innerHTML = stats.map(([l,n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+}
+
+async function loadEvents(id) {
+  if (!id) return;
+  const type = document.getElementById('filterType').value;
+  const conf = document.getElementById('filterConf').value;
+  let url = `/videos/${id}/events?`;
+  if (type) url += `event_type=${type}&`;
+  if (conf) url += `min_confidence=${conf}&`;
+  const events = await api(url);
+  const tbody = document.querySelector('#eventsTable tbody');
+  tbody.innerHTML = events.map(e => `<tr>
+    <td>${e.timestamp_sec.toFixed(2)}</td>
+    <td>${pill(e.event_type)}</td>
+    <td>${e.vehicle_id || '—'}</td>
+    <td>${e.confidence != null ? e.confidence.toFixed(2) : '—'}</td>
+    <td class="muted">${JSON.stringify(e.metadata)}</td>
+  </tr>`).join('');
+}
+
+function pill(type) {
+  const cls = type === 'LOW_CONFIDENCE' ? 'warn' : type.includes('UNUSUAL') ? 'bad' : 'good';
+  return `<span class="pill ${cls}">${type}</span>`;
+}
+
+async function loadOcr(id) {
+  const rows = await api(`/videos/${id}/analysis`).then(a => a.ocr_results);
+  document.getElementById('ocrEmpty').textContent = rows.length ? '' : 'OCR disabled or no plates detected in this run (see config.yaml → ocr.enabled).';
+  document.querySelector('#ocrTable tbody').innerHTML = rows.map(r =>
+    `<tr><td>${r.frame_number ?? '—'}</td><td>${r.plate_text ?? '—'}</td><td>${r.confidence?.toFixed(2) ?? '—'}</td></tr>`
+  ).join('');
+}
+
+async function loadVlm(id) {
+  const rows = await api(`/videos/${id}/analysis`).then(a => a.vlm_analysis);
+  document.getElementById('vlmEmpty').textContent = rows.length ? '' : 'VLM reasoning disabled for this run (see config.yaml → vlm.enabled).';
+  document.querySelector('#vlmTable tbody').innerHTML = rows.map(r =>
+    `<tr><td>${r.timestamp_sec?.toFixed(2) ?? '—'}</td><td>${r.vehicle_count ?? '—'}</td><td>${r.lane_occupied ? 'occupied' : 'clear'}</td><td>${(r.visual_conditions||[]).join(', ') || '—'}</td></tr>`
+  ).join('');
+}
+
+loadHealth(); loadVideos();
+</script>
+</body>
+</html>

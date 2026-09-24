@@ -1,0 +1,65 @@
+# AI Toll Booth Vision Analytics — configuration
+# Every model stage below can be independently disabled. The pipeline is
+# designed to degrade gracefully: YOLO detection + tracking is the only
+# required stage, everything else is optional "if available".
+
+video:
+  processing_fps: 5          # frames/sec actually run through the pipeline
+  max_dimension: 960          # frames are resized so the longer side <= this, for CPU speed
+
+detection:
+  model: "yolov8n.pt"         # smallest Ultralytics model; swap for yolov8s/m/l/x with more GPU
+  confidence: 0.40
+  classes: ["car", "truck", "bus", "motorcycle"]  # mapped from COCO classes
+
+tracking:
+  enabled: true
+  tracker: "bytetrack.yaml"   # ultralytics built-in ByteTrack config
+  max_age_frames: 30          # frames a track can go undetected before being dropped
+
+roi:
+  # Rectangle in pixel coordinates [x1, y1, x2, y2], relative to the resized frame.
+  # If null, the whole frame is treated as the lane (demo default).
+  lane_rect: null
+  direction_axis: "y"         # "y" (vertical lane) or "x" (horizontal lane)
+
+segmentation:
+  enabled: false               # SAM2 — disabled by default, heavy (checkpoint + deps)
+  model: "sam2_hiera_tiny"
+  run_on: "high_confidence"   # only segment detections above this policy, never every frame
+  min_confidence: 0.75
+  max_per_video: 40           # hard cap so SAM2 never becomes the bottleneck
+
+ocr:
+  enabled: false               # license-plate OCR — optional, privacy-sensitive, opt-in only
+  engine: "easyocr"            # "easyocr" or "paddleocr"
+  plate_detector_available: false   # set true only once a real plate detector model is wired in
+  label_as_experimental: true
+
+vlm:
+  enabled: false               # local VLM reasoning — heavy download, opt-in
+  model: "Qwen/Qwen2.5-VL-7B-Instruct"
+  sample_every_n_events: 5     # only reason over a sample of events, never every frame
+  max_frames_per_video: 20
+
+privacy:
+  blur_faces: true
+  blur_plates: true
+  store_raw_plate_crops: false  # if false, only OCR text + confidence is stored, not the image
+
+device:
+  prefer: "auto"               # "auto" | "cuda" | "mps" | "cpu"
+
+database:
+  path: "backend/database/toll_vision.db"
+
+paths:
+  videos_dir: "videos"
+  outputs_dir: "outputs"
+  models_dir: "models"
+
+demo_mode:
+  # If a required model/package is missing, fall back to a lightweight mock
+  # detector so the full pipeline (tracking/events/DB/API/dashboard) can still
+  # be exercised end-to-end without downloading anything.
+  allow_mock_detector: true

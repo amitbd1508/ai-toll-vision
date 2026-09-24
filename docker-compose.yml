@@ -1,0 +1,20 @@
+services:
+  ai-toll-vision:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./videos:/app/videos
+      - ./outputs:/app/outputs
+      - ./models:/app/models
+      - ./backend/database:/app/backend/database
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Uncomment to pass through an NVIDIA GPU (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
