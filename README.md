@@ -10,6 +10,7 @@ structured event data (SQLite).
 Every "smart" stage beyond detection+tracking is opt-in and clearly labeled
 when it's not running.
 
+![Project Demo](./assets/demo.gif)
 ---
 
 ## What it does
